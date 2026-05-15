@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { usePage, Link } from '@inertiajs/vue3';
-import { BookOpen, FolderGit2, MessageCircleMore } from 'lucide-vue-next';
+import { BookOpen, FolderGit2, MessageCircleMore, Plus } from 'lucide-vue-next';
 import AppLogo from '@/components/AppLogo.vue';
+import ChatBroadcastListener from '@/components/chat/ChatBroadcastListener.vue';
 import ChatSidebarConversations from '@/components/chat/ChatSidebarConversations.vue';
 import NavFooter from '@/components/NavFooter.vue';
 import NavMain from '@/components/NavMain.vue';
@@ -16,10 +17,15 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { index as chatIndex } from '@/routes/chat';
+import { useChatState } from '@/composables/useChatState';
+import { create as chatCreate, index as chatIndex } from '@/routes/chat';
 import type { NavItem } from '@/types';
 
 const page = usePage();
+const { chat, handleMessageSent, handleConversationViewed } = useChatState(
+    page.props.chat,
+);
+const currentUserId = computed(() => page.props.auth.user?.id ?? null);
 
 const mainNavItems: NavItem[] = [
     {
@@ -43,7 +49,16 @@ const footerNavItems: NavItem[] = [
 ];
 
 const isChatRoute = computed(() => page.url.startsWith('/chat'));
-const chat = computed(() => page.props.chat);
+
+function onMessageSent(payload: Parameters<typeof handleMessageSent>[0]): void {
+    handleMessageSent(payload, currentUserId.value);
+}
+
+function onConversationViewed(
+    payload: Parameters<typeof handleConversationViewed>[0],
+): void {
+    handleConversationViewed(payload, currentUserId.value);
+}
 </script>
 
 <template>
@@ -61,11 +76,30 @@ const chat = computed(() => page.props.chat);
         </SidebarHeader>
 
         <SidebarContent>
+            <template v-if="isChatRoute && chat">
+                <ChatBroadcastListener
+                    v-for="conversation in chat.conversations"
+                    :key="conversation.id"
+                    :conversation-id="conversation.id"
+                    @message-sent="onMessageSent"
+                    @conversation-viewed="onConversationViewed"
+                />
+            </template>
             <ChatSidebarConversations
                 v-if="isChatRoute && chat"
                 :conversations="chat.conversations"
                 :active-conversation-id="chat.activeConversationId"
             />
+            <SidebarMenu v-if="isChatRoute" class="px-2 pb-2">
+                <SidebarMenuItem>
+                    <SidebarMenuButton as-child class="h-auto py-2.5">
+                        <Link :href="chatCreate()" prefetch>
+                            <Plus class="size-4" />
+                            <span>Nueva conversación</span>
+                        </Link>
+                    </SidebarMenuButton>
+                </SidebarMenuItem>
+            </SidebarMenu>
             <NavMain v-else :items="mainNavItems" />
         </SidebarContent>
 

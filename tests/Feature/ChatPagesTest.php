@@ -47,6 +47,23 @@ test('authenticated users can view the chat index', function () {
         );
 });
 
+test('authenticated users can view the conversation creator', function () {
+    $user = User::factory()->create(['name' => 'Zoe User']);
+    $other = User::factory()->create(['name' => 'Alice User']);
+    $another = User::factory()->create(['name' => 'Bob User']);
+
+    createDirectConversation($user, $other);
+
+    $this->actingAs($user)
+        ->get(route('chat.create'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('chat/Create')
+            ->where('contacts.0.id', $other->id)
+            ->where('contacts.1.id', $another->id)
+        );
+});
+
 test('authenticated users can view a chat conversation', function () {
     $user = User::factory()->create();
     $other = User::factory()->create();

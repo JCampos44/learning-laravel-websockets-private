@@ -2,6 +2,7 @@
 
 use App\Events\Chat\ConversationViewed;
 use App\Events\Chat\MessageSent;
+use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\User;
 use Illuminate\Support\Facades\Event;
@@ -89,4 +90,50 @@ test('users can send a message to a conversation', function () {
             && $event->message->conversation_id === $conversation->id
             && $event->message->sender_id === $user->id;
     });
+});
+
+test('users can create a direct conversation with another user', function () {
+    $creator = User::factory()->create();
+    $participant = User::factory()->create();
+
+    $response = $this->actingAs($creator)->post(route('chat.conversations.store'), [
+        'participant_id' => $participant->id,
+    ]);
+
+    $conversation = Conversation::query()->firstOrFail();
+
+    $response->assertRedirect(route('chat.show', $conversation, absolute: false));
+
+    $this->assertDatabaseHas('conversations', [
+        'id' => $conversation->id,
+        'type' => 'direct',
+        'created_by_user_id' => $creator->id,
+        'direct_key' => collect([$creator->id, $participant->id])->sort()->join(':'),
+    ]);
+
+    $this->assertDatabaseHas('conversation_participants', [
+        'conversation_id' => $conversation->id,
+        'user_id' => $creator->id,
+        'role' => 'owner',
+    ]);
+
+    $this->assertDatabaseHas('conversation_participants', [
+        'conversation_id' => $conversation->id,
+        'user_id' => $participant->id,
+        'role' => 'member',
+    ]);
+});
+
+test('users reuse an existing direct conversation', function () {
+    $creator = User::factory()->create();
+    $participant = User::factory()->create();
+    $conversation = createDirectConversation($creator, $participant);
+
+    $response = $this->actingAs($participant)->post(route('chat.conversations.store'), [
+        'participant_id' => $creator->id,
+    ]);
+
+    $response->assertRedirect(route('chat.show', $conversation, absolute: false));
+
+    expect(Conversation::query()->count())->toBe(1);
 });

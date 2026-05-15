@@ -1,23 +1,43 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { Head, router } from '@inertiajs/vue3';
 import { MessageSquareText, Send } from 'lucide-vue-next';
+import { computed, nextTick, ref, watch } from 'vue';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import type { ChatMessage, ChatPageData } from '@/types';
+import { useChatState } from '@/composables/useChatState';
+import { store as chatMessagesStore } from '@/routes/chat/messages';
+import type { ChatPageData } from '@/types';
 
 const props = defineProps<{
     chat: ChatPageData;
 }>();
 
 const draft = ref('');
-const localMessages = ref<ChatMessage[]>([...props.chat.messages]);
+const messagesScrollContainer = ref<HTMLElement | null>(null);
+const { chat, syncChat } = useChatState(props.chat);
+const activeConversation = computed(() => chat.value?.activeConversation ?? null);
 
-const activeConversation = computed(() => props.chat.activeConversation);
+watch(
+    () => props.chat,
+    (nextChat) => {
+        syncChat(nextChat);
+    },
+    { immediate: true },
+);
+
 const pageTitle = computed(() =>
     activeConversation.value ? `${activeConversation.value.name} · Chat` : 'Chat',
 );
+
+function scrollMessagesToBottom(): void {
+    nextTick(() => {
+        messagesScrollContainer.value?.scrollTo({
+            top: messagesScrollContainer.value.scrollHeight,
+            behavior: 'smooth',
+        });
+    });
+}
 
 function sendMessage(): void {
     if (!activeConversation.value) {
@@ -30,17 +50,28 @@ function sendMessage(): void {
         return;
     }
 
-    localMessages.value.push({
-        id: Date.now(),
-        author: 'Tú',
-        body: trimmedDraft,
-        sentAt: 'Ahora',
-        isMine: true,
-        status: 'sent',
-    });
-
-    draft.value = '';
+    router.post(
+        chatMessagesStore(activeConversation.value.id).url,
+        {
+            body: trimmedDraft,
+        },
+        {
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => {
+                draft.value = '';
+            },
+        },
+    );
 }
+
+watch(
+    () => chat.value?.messages.length ?? 0,
+    () => {
+        scrollMessagesToBottom();
+    },
+    { flush: 'post' },
+);
 </script>
 
 <template>
@@ -77,10 +108,13 @@ function sendMessage(): void {
                 </header>
 
                 <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-                    <div class="flex-1 overflow-y-auto px-6 py-6">
+                    <div
+                        ref="messagesScrollContainer"
+                        class="flex-1 overflow-y-auto px-6 py-6"
+                    >
                         <div class="mx-auto flex w-full max-w-4xl flex-col gap-4">
                             <div
-                                v-for="message in localMessages"
+                                v-for="message in chat?.messages ?? []"
                                 :key="message.id"
                                 class="flex"
                                 :class="message.isMine ? 'justify-end' : 'justify-start'"
@@ -147,7 +181,8 @@ function sendMessage(): void {
                             v-if="activeConversation"
                             class="mx-auto mt-2 max-w-4xl text-xs text-muted-foreground"
                         >
-                            Vista simulada. El envío todavía vive solo en el navegador.
+                            Ahora el formulario pega al backend y el panel se actualiza por
+                            Echo.
                         </p>
                     </form>
                 </div>

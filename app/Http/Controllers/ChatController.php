@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Events\Chat\ConversationViewed;
 use App\Events\Chat\MessageSent;
+use App\Http\Requests\StoreConversationRequest;
 use App\Http\Requests\StoreMessageRequest;
 use App\Models\Conversation;
 use App\Models\ConversationParticipant;
@@ -26,6 +27,19 @@ class ChatController extends Controller
     {
         return Inertia::render('chat/Index', [
             'chat' => $this->chatData($request->user()),
+        ]);
+    }
+
+    /**
+     * Show the conversation creation screen.
+     */
+    public function create(Request $request): Response
+    {
+        $user = $request->user();
+
+        return Inertia::render('chat/Create', [
+            'chat' => $this->chatData($user),
+            'contacts' => $this->availableContacts($user),
         ]);
     }
 
@@ -68,6 +82,64 @@ class ChatController extends Controller
         });
 
         MessageSent::dispatch($message->loadMissing('conversation', 'sender'));
+
+        return to_route('chat.show', $conversation);
+    }
+
+    /**
+     * Create or open a direct conversation with another user.
+     */
+    public function storeConversation(StoreConversationRequest $request): RedirectResponse
+    {
+        $user = $request->user();
+        $participant = User::query()->findOrFail($request->participantId());
+
+        $conversation = DB::transaction(function () use ($user, $participant): Conversation {
+            $conversation = Conversation::query()->firstOrCreate(
+                [
+                    'direct_key' => $this->directConversationKey($user->id, $participant->id),
+                ],
+                [
+                    'type' => 'direct',
+                    'title' => null,
+                    'created_by_user_id' => $user->id,
+                ],
+            );
+
+            ConversationParticipant::query()->firstOrCreate(
+                [
+                    'conversation_id' => $conversation->id,
+                    'user_id' => $user->id,
+                ],
+                [
+                    'role' => 'owner',
+                    'joined_at' => now(),
+                    'left_at' => null,
+                    'last_read_at' => null,
+                    'last_read_message_id' => null,
+                    'archived_at' => null,
+                    'muted_until' => null,
+                ],
+            );
+
+            ConversationParticipant::query()->firstOrCreate(
+                [
+                    'conversation_id' => $conversation->id,
+                    'user_id' => $participant->id,
+                ],
+                [
+                    'role' => 'member',
+                    'joined_at' => now(),
+                    'left_at' => null,
+                    'last_read_at' => null,
+                    'last_read_message_id' => null,
+                    'archived_at' => null,
+                    'muted_until' => null,
+                ],
+            );
+
+            return $conversation;
+        });
 
         return to_route('chat.show', $conversation);
     }
@@ -122,6 +194,50 @@ class ChatController extends Controller
             ])
             ->orderByRaw('COALESCE(last_message_at, conversations.created_at) DESC')
             ->orderByDesc('conversations.id');
+    }
+
+    /**
+     * Get contact suggestions for creating a direct conversation.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function availableContacts(User $user): array
+    {
+        $existingConversationIds = Conversation::query()
+            ->where('type', 'direct')
+            ->whereHas('participantRecords', function (Builder $query) use ($user): void {
+                $query->where('user_id', $user->id)
+                    ->whereNull('left_at');
+            })
+            ->with('participantRecords')
+            ->get()
+            ->mapWithKeys(function (Conversation $conversation) use ($user): array {
+                $otherParticipant = $conversation->participantRecords
+                    ->first(fn (ConversationParticipant $participant): bool => $participant->user_id !== $user->id);
+
+                if ($otherParticipant === null) {
+                    return [];
+                }
+
+                return [$otherParticipant->user_id => $conversation->id];
+            });
+
+        return User::query()
+            ->whereKeyNot($user->id)
+            ->orderBy('name')
+            ->get()
+            ->values()
+            ->map(function (User $contact) use ($existingConversationIds): array {
+                return [
+                    'id' => $contact->id,
+                    'name' => $contact->name,
+                    'email' => $contact->email,
+                    'avatarInitials' => $this->avatarInitials($contact->name),
+                    'avatarClass' => $this->avatarClassForUser($contact->id),
+                    'existingConversationId' => $existingConversationIds[$contact->id] ?? null,
+                ];
+            })
+            ->all();
     }
 
     /**
@@ -375,6 +491,32 @@ class ChatController extends Controller
         ];
 
         return $palette[($conversationId - 1) % count($palette)];
+    }
+
+    /**
+     * Build a stable avatar class from the user id.
+     */
+    private function avatarClassForUser(int $userId): string
+    {
+        $palette = [
+            'bg-emerald-500/15 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200',
+            'bg-sky-500/15 text-sky-700 dark:bg-sky-500/20 dark:text-sky-200',
+            'bg-violet-500/15 text-violet-700 dark:bg-violet-500/20 dark:text-violet-200',
+            'bg-amber-500/15 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200',
+            'bg-rose-500/15 text-rose-700 dark:bg-rose-500/20 dark:text-rose-200',
+        ];
+
+        return $palette[($userId - 1) % count($palette)];
+    }
+
+    /**
+     * Build the canonical direct conversation key for two users.
+     */
+    private function directConversationKey(int $firstUserId, int $secondUserId): string
+    {
+        return collect([$firstUserId, $secondUserId])
+            ->sort()
+            ->join(':');
     }
 
     /**

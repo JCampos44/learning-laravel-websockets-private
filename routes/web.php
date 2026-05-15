@@ -13,6 +13,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->prefix('chat')
         ->group(function () {
             Route::get('/', 'index')->name('chat.index');
+            Route::get('/create', 'create')->name('chat.create');
+            Route::post('/conversations', 'storeConversation')->name('chat.conversations.store');
             Route::get('{conversation}', 'show')
                 ->whereNumber('conversation')
                 ->name('chat.show');
