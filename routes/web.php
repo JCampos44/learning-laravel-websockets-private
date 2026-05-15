@@ -16,6 +16,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('{conversation}', 'show')
                 ->whereNumber('conversation')
                 ->name('chat.show');
+            Route::post('{conversation}/messages', 'store')
+                ->whereNumber('conversation')
+                ->name('chat.messages.store');
         });
 });
 

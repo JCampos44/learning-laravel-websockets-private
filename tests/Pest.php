@@ -1,5 +1,9 @@
 <?php
 
+use App\Models\Conversation;
+use App\Models\ConversationParticipant;
+use App\Models\Message;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -41,10 +45,47 @@ expect()->extend('toBeOne', function () {
 | While Pest is very powerful out-of-the-box, you may have some testing code specific to your
 | project that you don't want to repeat in every file. Here you can also expose helpers as
 | global functions to help you to reduce the number of lines of code in your test files.
-|
 */
 
-function something()
-{
-    // ..
+function createDirectConversation(
+    User $creator,
+    User $participant,
+    array $messages = [],
+): Conversation {
+    $conversation = Conversation::factory()->create([
+        'created_by_user_id' => $creator->id,
+        'direct_key' => "{$creator->id}:{$participant->id}",
+    ]);
+
+    ConversationParticipant::factory()
+        ->owner()
+        ->for($conversation)
+        ->for($creator)
+        ->create([
+            'joined_at' => now()->subHour(),
+        ]);
+
+    ConversationParticipant::factory()
+        ->for($conversation)
+        ->for($participant)
+        ->create([
+            'joined_at' => now()->subHour(),
+        ]);
+
+    foreach ($messages as $message) {
+        $createdMessage = Message::factory()
+            ->for($conversation)
+            ->for($message['sender'], 'sender')
+            ->create([
+                'body' => $message['body'],
+                'metadata' => $message['metadata'] ?? ['kind' => 'text'],
+            ]);
+
+        $conversation->forceFill([
+            'last_message_id' => $createdMessage->id,
+            'last_message_at' => $createdMessage->created_at,
+        ])->save();
+    }
+
+    return $conversation->refresh();
 }
