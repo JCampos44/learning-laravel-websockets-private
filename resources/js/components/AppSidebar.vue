@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
+import { computed } from 'vue';
+import { usePage, Link } from '@inertiajs/vue3';
 import { BookOpen, FolderGit2, LayoutGrid } from 'lucide-vue-next';
 import AppLogo from '@/components/AppLogo.vue';
+import ChatSidebarConversations from '@/components/chat/ChatSidebarConversations.vue';
 import NavFooter from '@/components/NavFooter.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
@@ -16,6 +18,8 @@ import {
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
 import type { NavItem } from '@/types';
+
+const page = usePage();
 
 const mainNavItems: NavItem[] = [
     {
@@ -37,6 +41,9 @@ const footerNavItems: NavItem[] = [
         icon: BookOpen,
     },
 ];
+
+const isChatRoute = computed(() => page.url.startsWith('/chat'));
+const chat = computed(() => page.props.chat);
 </script>
 
 <template>
@@ -54,7 +61,12 @@ const footerNavItems: NavItem[] = [
         </SidebarHeader>
 
         <SidebarContent>
-            <NavMain :items="mainNavItems" />
+            <ChatSidebarConversations
+                v-if="isChatRoute && chat"
+                :conversations="chat.conversations"
+                :active-conversation-id="chat.activeConversationId"
+            />
+            <NavMain v-else :items="mainNavItems" />
         </SidebarContent>
 
         <SidebarFooter>
