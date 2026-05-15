@@ -10,6 +10,7 @@ import type {
 
 const chatState = ref<ChatPageData | null>(null);
 const pendingViewedConversationIds = new Set<number>();
+let notificationAudio: HTMLAudioElement | null = null;
 
 function cloneConversation(conversation: ChatConversation): ChatConversation {
     return {
@@ -38,7 +39,25 @@ function cloneChat(nextChat: ChatPageData): ChatPageData {
         activeConversationId: nextChat.activeConversationId,
         activeConversation,
         messages: nextChat.messages.map(cloneMessage),
+        wasViewedOnServer: nextChat.wasViewedOnServer,
     };
+}
+
+function sortConversationsByActivity(): void {
+    if (!chatState.value) {
+        return;
+    }
+
+    chatState.value.conversations.sort((firstConversation, secondConversation) => {
+        const firstActivity = Date.parse(firstConversation.lastMessageAtIso);
+        const secondActivity = Date.parse(secondConversation.lastMessageAtIso);
+
+        if (firstActivity !== secondActivity) {
+            return secondActivity - firstActivity;
+        }
+
+        return secondConversation.id - firstConversation.id;
+    });
 }
 
 function findConversation(
@@ -83,6 +102,20 @@ function formatBroadcastTimestamp(timestamp: string | null): string {
         hour: '2-digit',
         minute: '2-digit',
     }).format(new Date(timestamp));
+}
+
+function playNotificationSound(): void {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    if (notificationAudio === null) {
+        notificationAudio = new Audio('/audio/notification.mp3');
+        notificationAudio.preload = 'auto';
+    }
+
+    notificationAudio.currentTime = 0;
+    void notificationAudio.play().catch(() => {});
 }
 
 function getXsrfToken(): string | null {
@@ -131,6 +164,17 @@ async function markConversationViewed(conversationId: number): Promise<void> {
     }
 }
 
+function ensureConversationViewed(
+    conversationId: number | null,
+    wasViewedOnServer: boolean,
+): void {
+    if (conversationId === null || wasViewedOnServer) {
+        return;
+    }
+
+    void markConversationViewed(conversationId);
+}
+
 export function useChatState(initialChat?: ChatPageData) {
     if (initialChat) {
         chatState.value = cloneChat(initialChat);
@@ -138,6 +182,7 @@ export function useChatState(initialChat?: ChatPageData) {
 
     function syncChat(nextChat: ChatPageData): void {
         chatState.value = cloneChat(nextChat);
+        sortConversationsByActivity();
     }
 
     function handleMessageSent(
@@ -156,11 +201,18 @@ export function useChatState(initialChat?: ChatPageData) {
         updateConversation(message.conversation_id, (conversation) => {
             conversation.lastMessage = message.body;
             conversation.lastMessageAt = formatBroadcastTimestamp(message.created_at);
+            conversation.lastMessageAtIso = message.created_at ?? conversation.lastMessageAtIso;
             conversation.unreadCount =
                 isActiveConversation || isMine
                     ? 0
                     : conversation.unreadCount + 1;
         });
+
+        if (!isMine) {
+            playNotificationSound();
+        }
+
+        sortConversationsByActivity();
 
         if (
             isActiveConversation &&
@@ -215,6 +267,7 @@ export function useChatState(initialChat?: ChatPageData) {
     return {
         chat: chatState,
         syncChat,
+        ensureConversationViewed,
         handleMessageSent,
         handleConversationViewed,
     };

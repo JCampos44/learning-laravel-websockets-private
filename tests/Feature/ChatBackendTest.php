@@ -6,6 +6,7 @@ use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\User;
 use Illuminate\Support\Facades\Event;
+use Inertia\Testing\AssertableInertia;
 
 test('non participants cannot view a conversation', function () {
     $owner = User::factory()->create();
@@ -53,6 +54,36 @@ test('opening a conversation marks it as viewed', function () {
         return $event->conversation->is($conversation)
             && $event->participant->user_id === $user->id;
     });
+});
+
+test('prefetching a conversation does not mark it as viewed', function () {
+    Event::fake([ConversationViewed::class]);
+
+    $user = User::factory()->create();
+    $other = User::factory()->create();
+    $conversation = createDirectConversation($user, $other, [
+        [
+            'sender' => $other,
+            'body' => 'Este mensaje no debe marcarse como leído al prefetch.',
+        ],
+    ]);
+
+    $this->actingAs($user)
+        ->withHeaders(['Purpose' => 'prefetch'])
+        ->get(route('chat.show', $conversation))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('chat/Index')
+            ->where('chat.wasViewedOnServer', false)
+        );
+
+    $this->assertDatabaseHas('conversation_participants', [
+        'conversation_id' => $conversation->id,
+        'user_id' => $user->id,
+        'last_read_message_id' => null,
+    ]);
+
+    Event::assertNotDispatched(ConversationViewed::class);
 });
 
 test('marking a conversation as viewed via endpoint updates the read receipt', function () {

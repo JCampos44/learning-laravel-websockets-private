@@ -6,6 +6,7 @@ export type ChatConversation = {
     avatarClass: string;
     lastMessage: string;
     lastMessageAt: string;
+    lastMessageAtIso: string;
     unreadCount: number;
     isOnline: boolean;
     statusLabel: string;
@@ -52,4 +53,5 @@ export type ChatPageData = {
     activeConversationId: number | null;
     activeConversation: ChatConversation | null;
     messages: ChatMessage[];
+    wasViewedOnServer: boolean;
 };

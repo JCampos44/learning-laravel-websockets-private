@@ -15,13 +15,24 @@ const props = defineProps<{
 
 const draft = ref('');
 const messagesScrollContainer = ref<HTMLElement | null>(null);
-const { chat, syncChat } = useChatState(props.chat);
+const { chat, syncChat, ensureConversationViewed } = useChatState(props.chat);
 const activeConversation = computed(() => chat.value?.activeConversation ?? null);
 
 watch(
     () => props.chat,
     (nextChat) => {
         syncChat(nextChat);
+    },
+    { immediate: true },
+);
+
+watch(
+    () => activeConversation.value?.id ?? null,
+    (conversationId) => {
+        ensureConversationViewed(
+            conversationId,
+            chat.value?.wasViewedOnServer ?? false,
+        );
     },
     { immediate: true },
 );
@@ -63,6 +74,15 @@ function sendMessage(): void {
             },
         },
     );
+}
+
+function handleDraftKeydown(event: KeyboardEvent): void {
+    if (event.key !== 'Enter' || event.shiftKey || event.isComposing) {
+        return;
+    }
+
+    event.preventDefault();
+    sendMessage();
 }
 
 watch(
@@ -160,6 +180,7 @@ watch(
                                 v-model="draft"
                                 rows="2"
                                 :disabled="!activeConversation"
+                                @keydown="handleDraftKeydown"
                                 class="min-h-[3.5rem] flex-1 resize-none border-0 bg-transparent px-1 py-2 text-sm shadow-none outline-none placeholder:text-muted-foreground focus-visible:ring-0 disabled:cursor-not-allowed"
                                 :placeholder="
                                     activeConversation

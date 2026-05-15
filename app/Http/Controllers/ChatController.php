@@ -51,10 +51,14 @@ class ChatController extends Controller
         $user = $request->user();
         $conversation = $this->loadVisibleConversation($user, $conversation);
 
-        $this->markConversationAsViewed($conversation, $user);
+        $wasViewedOnServer = ! $this->isPrefetchRequest($request);
+
+        if ($wasViewedOnServer) {
+            $this->markConversationAsViewed($conversation, $user);
+        }
 
         return Inertia::render('chat/Index', [
-            'chat' => $this->chatData($user, $conversation->id),
+            'chat' => $this->chatData($user, $conversation->id, $wasViewedOnServer),
         ]);
     }
 
@@ -167,8 +171,11 @@ class ChatController extends Controller
      *     messages: array<int, array<string, mixed>>
      * }
      */
-    private function chatData(User $user, ?int $activeConversationId = null): array
-    {
+    private function chatData(
+        User $user,
+        ?int $activeConversationId = null,
+        bool $wasViewedOnServer = false,
+    ): array {
         $conversations = $this->conversationListQuery($user)->get();
         $activeConversation = $activeConversationId !== null
             ? $this->loadConversationDetails($user, $activeConversationId)
@@ -185,6 +192,7 @@ class ChatController extends Controller
             'messages' => $activeConversation !== null
                 ? $this->messageSummaries($activeConversation, $user)
                 : [],
+            'wasViewedOnServer' => $wasViewedOnServer,
         ];
     }
 
@@ -312,6 +320,14 @@ class ChatController extends Controller
     }
 
     /**
+     * Determine whether the request is an Inertia prefetch.
+     */
+    private function isPrefetchRequest(Request $request): bool
+    {
+        return $request->header('Purpose') === 'prefetch';
+    }
+
+    /**
      * Convert a conversation to the payload expected by the frontend.
      *
      * @return array<string, mixed>
@@ -331,6 +347,7 @@ class ChatController extends Controller
             'avatarClass' => $this->avatarClassForConversation($conversation->id),
             'lastMessage' => $lastMessage?->body ?? 'Sin mensajes todavía',
             'lastMessageAt' => $this->formatConversationTimestamp($conversation->last_message_at ?? $conversation->created_at),
+            'lastMessageAtIso' => ($conversation->last_message_at ?? $conversation->created_at)->toISOString(),
             'unreadCount' => $this->unreadCountFor($conversation, $user, $participant),
             'isOnline' => false,
             'statusLabel' => $this->conversationStatusLabel($conversation),
