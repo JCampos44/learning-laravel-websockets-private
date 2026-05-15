@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { usePage, Link } from '@inertiajs/vue3';
-import { BookOpen, FolderGit2, LayoutGrid } from 'lucide-vue-next';
+import { BookOpen, FolderGit2, MessageCircleMore } from 'lucide-vue-next';
 import AppLogo from '@/components/AppLogo.vue';
 import ChatSidebarConversations from '@/components/chat/ChatSidebarConversations.vue';
 import NavFooter from '@/components/NavFooter.vue';
@@ -16,16 +16,16 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { dashboard } from '@/routes';
+import { index as chatIndex } from '@/routes/chat';
 import type { NavItem } from '@/types';
 
 const page = usePage();
 
 const mainNavItems: NavItem[] = [
     {
-        title: 'Dashboard',
-        href: dashboard(),
-        icon: LayoutGrid,
+        title: 'Chat',
+        href: chatIndex(),
+        icon: MessageCircleMore,
     },
 ];
 
@@ -49,15 +49,15 @@ const chat = computed(() => page.props.chat);
 <template>
     <Sidebar collapsible="icon" variant="inset">
         <SidebarHeader>
-            <SidebarMenu>
-                <SidebarMenuItem>
-                    <SidebarMenuButton size="lg" as-child>
-                        <Link :href="dashboard()">
-                            <AppLogo />
-                        </Link>
-                    </SidebarMenuButton>
-                </SidebarMenuItem>
-            </SidebarMenu>
+                <SidebarMenu>
+                    <SidebarMenuItem>
+                        <SidebarMenuButton size="lg" as-child>
+                            <Link :href="chatIndex()">
+                                <AppLogo />
+                            </Link>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+                </SidebarMenu>
         </SidebarHeader>
 
         <SidebarContent>
