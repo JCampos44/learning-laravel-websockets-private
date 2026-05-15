@@ -21,6 +21,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('{conversation}/messages', 'store')
                 ->whereNumber('conversation')
                 ->name('chat.messages.store');
+            Route::post('{conversation}/viewed', 'view')
+                ->whereNumber('conversation')
+                ->name('chat.viewed');
         });
 });
 

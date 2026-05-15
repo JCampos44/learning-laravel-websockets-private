@@ -87,6 +87,19 @@ class ChatController extends Controller
     }
 
     /**
+     * Mark a conversation as viewed without navigating away from the current page.
+     */
+    public function view(Request $request, Conversation $conversation)
+    {
+        $user = $request->user();
+        $conversation = $this->loadVisibleConversation($user, $conversation);
+
+        $this->markConversationAsViewed($conversation, $user);
+
+        return response()->noContent();
+    }
+
+    /**
      * Create or open a direct conversation with another user.
      */
     public function storeConversation(StoreConversationRequest $request): RedirectResponse

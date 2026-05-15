@@ -55,6 +55,40 @@ test('opening a conversation marks it as viewed', function () {
     });
 });
 
+test('marking a conversation as viewed via endpoint updates the read receipt', function () {
+    Event::fake([ConversationViewed::class]);
+
+    $user = User::factory()->create();
+    $other = User::factory()->create();
+    $conversation = createDirectConversation($user, $other, [
+        [
+            'sender' => $other,
+            'body' => 'Mensaje que debe marcarse como leído sin salir del chat.',
+        ],
+    ]);
+
+    $response = $this->actingAs($user)
+        ->post(route('chat.viewed', $conversation));
+
+    $response->assertNoContent();
+
+    $latestMessage = Message::query()
+        ->where('conversation_id', $conversation->id)
+        ->latest('id')
+        ->firstOrFail();
+
+    $this->assertDatabaseHas('conversation_participants', [
+        'conversation_id' => $conversation->id,
+        'user_id' => $user->id,
+        'last_read_message_id' => $latestMessage->id,
+    ]);
+
+    Event::assertDispatched(ConversationViewed::class, function (ConversationViewed $event) use ($conversation, $user): bool {
+        return $event->conversation->is($conversation)
+            && $event->participant->user_id === $user->id;
+    });
+});
+
 test('users can send a message to a conversation', function () {
     Event::fake([MessageSent::class]);
 

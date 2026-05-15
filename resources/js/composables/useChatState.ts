@@ -1,4 +1,5 @@
 import { ref } from 'vue';
+import { viewed as chatViewed } from '@/routes/chat';
 import type {
     ChatBroadcastConversationViewedPayload,
     ChatBroadcastMessageSentPayload,
@@ -8,6 +9,7 @@ import type {
 } from '@/types';
 
 const chatState = ref<ChatPageData | null>(null);
+const pendingViewedConversationIds = new Set<number>();
 
 function cloneConversation(conversation: ChatConversation): ChatConversation {
     return {
@@ -83,6 +85,52 @@ function formatBroadcastTimestamp(timestamp: string | null): string {
     }).format(new Date(timestamp));
 }
 
+function getXsrfToken(): string | null {
+    if (typeof document === 'undefined') {
+        return null;
+    }
+
+    const token = document.cookie
+        .split('; ')
+        .find((cookie) => cookie.startsWith('XSRF-TOKEN='))
+        ?.split('=')
+        .at(1);
+
+    return token ? decodeURIComponent(token) : null;
+}
+
+async function markConversationViewed(conversationId: number): Promise<void> {
+    if (
+        typeof window === 'undefined' ||
+        pendingViewedConversationIds.has(conversationId)
+    ) {
+        return;
+    }
+
+    const xsrfToken = getXsrfToken();
+
+    if (!xsrfToken) {
+        return;
+    }
+
+    pendingViewedConversationIds.add(conversationId);
+
+    try {
+        await fetch(chatViewed(conversationId).url, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-XSRF-TOKEN': xsrfToken,
+            },
+        });
+    } finally {
+        pendingViewedConversationIds.delete(conversationId);
+    }
+}
+
 export function useChatState(initialChat?: ChatPageData) {
     if (initialChat) {
         chatState.value = cloneChat(initialChat);
@@ -128,6 +176,10 @@ export function useChatState(initialChat?: ChatPageData) {
                 isMine,
                 status: isMine ? 'sent' : 'delivered',
             });
+
+            if (!isMine) {
+                void markConversationViewed(message.conversation_id);
+            }
         }
     }
 
